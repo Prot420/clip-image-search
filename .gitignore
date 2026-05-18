@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+release/
+out/
+
+# Local data (user-specific, never commit)
+*.sqlite
+*.sqlite-journal
+*.db
+data/
+logs/
+
+# Model files (auto-downloaded, ~82MB — don't commit to git)
+resources/models/*.onnx
+resources/models/*.json
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+
+# Env
+.env
+.env.local
+.test-data/
+.userdata/

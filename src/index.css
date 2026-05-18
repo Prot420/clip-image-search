@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: #0a0a0b;
+  color: #e8e8ec;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: #131316; }
+*::-webkit-scrollbar-thumb { background: #2e2e38; border-radius: 5px; }
+*::-webkit-scrollbar-thumb:hover { background: #3e3e48; }
+
+button:focus-visible, input:focus-visible {
+  outline: 2px solid #5b8def;
+  outline-offset: 2px;
+}
+
+.drag-region { -webkit-app-region: drag; }
+.no-drag      { -webkit-app-region: no-drag; }
