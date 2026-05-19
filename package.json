@@ -22,6 +22,8 @@
     "better-sqlite3": "11.3.0",
     "chokidar": "3.6.0",
     "electron-log": "5.2.0",
+    "heic-convert": "^2.1.0",
+    "lucide-react": "^1.16.0",
     "onnxruntime-node": "1.19.2",
     "sharp": "0.33.5"
   },

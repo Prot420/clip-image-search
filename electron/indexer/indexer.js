@@ -1,17 +1,3 @@
-/**
- * electron/indexer/indexer.js
- *
- * Orchestrates indexing of a folder:
- *   1. scan folder for images
- *   2. for each image, check if already up-to-date in DB (skip if so)
- *   3. embed image via CLIP worker
- *   4. upsert into DB (batched in transactions for speed)
- *   5. emit progress events
- *
- * Uses an EventEmitter so the IPC layer (Phase 7) can subscribe and
- * forward progress to the React UI.
- */
-
 const { EventEmitter } = require('events');
 const path = require('path');
 const db = require('../db/database');
@@ -19,7 +5,7 @@ const clip = require('../clip/clipWorker');
 const { scanFolder } = require('./scanner');
 const log = require('../utils/logger');
 
-const BATCH_SIZE = 50; // commit DB writes every N images
+const BATCH_SIZE = 10; // smaller batch — caption gen is slow
 
 class Indexer extends EventEmitter {
   constructor() {
@@ -28,98 +14,73 @@ class Indexer extends EventEmitter {
     this.running = false;
   }
 
-  cancel() {
-    this.cancelled = true;
-  }
+  cancel() { this.cancelled = true; }
 
-  /**
-   * Index a folder by its DB row.
-   *
-   * @param {{id: number, path: string}} folder
-   * @returns {Promise<{indexed: number, skipped: number, failed: number, durationMs: number}>}
-   */
   async indexFolder(folder) {
-    if (this.running) {
-      throw new Error('Indexer is already running');
-    }
+    if (this.running) throw new Error('Indexer already running');
     this.running = true;
     this.cancelled = false;
 
     const t0 = Date.now();
-    let indexed = 0;
-    let skipped = 0;
-    let failed = 0;
+    let indexed = 0, skipped = 0, failed = 0;
 
     try {
       await clip.init();
-
-      log.info(`Indexing folder: ${folder.path}`);
+      log.info('Indexing folder: ' + folder.path);
       this.emit('start', { folderId: folder.id, folderPath: folder.path });
 
       const files = await scanFolder(folder.path);
       const total = files.length;
-      log.info(`Found ${total} images in ${folder.path}`);
+      log.info('Found ' + total + ' images');
       this.emit('scanned', { total });
 
       const batch = [];
 
       for (let i = 0; i < files.length; i++) {
-        if (this.cancelled) {
-          log.warn('Indexing cancelled by user');
-          break;
-        }
-
+        if (this.cancelled) { log.warn('Indexing cancelled'); break; }
         const f = files[i];
-
-        // Incremental check: skip if path + mtime + size match what's in DB
         const existing = db.getImageMetaByPath(f.path);
         if (existing && existing.file_mtime === f.mtime && existing.file_size === f.size) {
           skipped++;
           this.emit('progress', { current: i + 1, total, file: f.filename, status: 'skipped' });
           continue;
         }
-
         try {
-          const { embedding, width, height } = await clip.embedImage(f.path);
+          const { embedding, caption, captionEmbedding, width, height } = await clip.captionAndEmbed(f.path);
           batch.push({
             path: f.path,
             filename: f.filename,
             folderId: folder.id,
             fileSize: f.size,
             fileMtime: f.mtime,
-            width,
-            height,
-            embedding
+            width, height,
+            embedding,
+            caption,
+            captionEmbedding
           });
           indexed++;
-
           if (batch.length >= BATCH_SIZE) {
             db.upsertImagesBatch(batch);
             batch.length = 0;
           }
-
-          this.emit('progress', { current: i + 1, total, file: f.filename, status: 'indexed' });
+          this.emit('progress', { current: i + 1, total, file: f.filename, status: 'indexed', caption });
         } catch (err) {
           failed++;
-          log.error(`Failed to embed ${f.path}:`, err.message);
+          log.error('Failed to index ' + f.path + ': ' + err.message);
           this.emit('progress', { current: i + 1, total, file: f.filename, status: 'failed', error: err.message });
         }
       }
 
-      // Flush remaining batch
-      if (batch.length > 0) {
-        db.upsertImagesBatch(batch);
-      }
-
+      if (batch.length > 0) db.upsertImagesBatch(batch);
       db.updateFolderLastScan(folder.id);
 
       const durationMs = Date.now() - t0;
       const result = { indexed, skipped, failed, durationMs };
-      log.info(`Indexing complete:`, result);
+      log.info('Indexing complete: ' + JSON.stringify(result));
       this.emit('complete', result);
       return result;
     } catch (err) {
-      log.error('Indexer fatal error:', err);
+      log.error('Indexer fatal: ' + err.message);
       this.emit('error', { error: err.message });
       throw err;
     } finally {
@@ -127,10 +88,6 @@ class Indexer extends EventEmitter {
     }
   }
 
-  /**
-   * Index a single new image (used by folder watcher).
-   * Cheaper than full re-scan when only one file changed.
-   */
   async indexSingleFile(filePath, folderId) {
     try {
       await clip.init();
@@ -139,21 +96,20 @@ class Indexer extends EventEmitter {
       if (existing && existing.file_mtime === stat.mtimeMs && existing.file_size === stat.size) {
         return { status: 'skipped' };
       }
-      const { embedding, width, height } = await clip.embedImage(filePath);
+      const { embedding, caption, captionEmbedding, width, height } = await clip.captionAndEmbed(filePath);
       db.upsertImage({
         path: filePath,
         filename: path.basename(filePath),
         folderId,
         fileSize: stat.size,
         fileMtime: stat.mtimeMs,
-        width,
-        height,
-        embedding
+        width, height,
+        embedding, caption, captionEmbedding
       });
-      log.info(`Indexed (single): ${filePath}`);
-      return { status: 'indexed' };
+      log.info('Indexed (single): ' + filePath);
+      return { status: 'indexed', caption };
     } catch (err) {
-      log.error(`Failed to index single ${filePath}:`, err.message);
+      log.error('Failed single ' + filePath + ': ' + err.message);
       return { status: 'failed', error: err.message };
     }
   }

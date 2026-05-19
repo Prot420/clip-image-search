@@ -9,10 +9,7 @@
 name: Build Windows Installer
 
 on:
-  # Manual trigger from the Actions tab UI
   workflow_dispatch:
-
-  # Automatic on version tag push (e.g. git tag v1.0.0 && git push --tags)
   push:
     tags:
       - 'v*'
@@ -21,60 +18,51 @@ jobs:
   build:
     name: Build .exe on Windows
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
-      # 1. Checkout source
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Setup Node 20 (matches Electron 32's internal Node version)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      # 3. Cache CLIP model files between runs (~150 MB, no need to re-download)
-      - name: Cache CLIP models
+      # Cache SigLIP 2 + Florence-2 model files (~740 MB)
+      - name: Cache models
         id: cache-models
         uses: actions/cache@v4
         with:
           path: resources/models
-          key: clip-models-v1
+          key: siglip-florence-models-v1
 
-      # 4. Install dependencies (postinstall runs electron-builder install-app-deps,
-      #    which rebuilds native modules for Electron's Node ABI)
       - name: Install dependencies
         run: npm ci
         shell: cmd
 
-      # 5. Download CLIP models if cache missed
-      - name: Download CLIP models
+      - name: Download models if cache missed
         if: steps.cache-models.outputs.cache-hit != 'true'
         run: npm run download-models
         shell: cmd
 
-      # 6. Verify all 7 model files are present
+      # Verify all expected files are present
       - name: Verify model files
         run: |
-          node -e "const fs=require('fs');const p=require('path');const dir='resources/models';const need=['clip-vision-q.onnx','clip-text-q.onnx','tokenizer.json','tokenizer_config.json','special_tokens_map.json','vocab.json','merges.txt'];for (const f of need){const fp=p.join(dir,f);if(!fs.existsSync(fp)){console.error('MISSING:',f);process.exit(1);}const sz=fs.statSync(fp).size;console.log('OK',f,(sz/1024/1024).toFixed(2)+'MB');}"
+          node -e "const fs=require('fs');const p=require('path');const dir='resources/models';const need=['vision_model.onnx','text_model.onnx','tokenizer.json','tokenizer_config.json','special_tokens_map.json','preprocessor_config.json','config.json','florence_vision_encoder.onnx','florence_embed_tokens.onnx','florence_encoder.onnx','florence_decoder.onnx','florence_tokenizer.json','florence_tokenizer_config.json','florence_config.json','florence_generation_config.json','florence_preprocessor_config.json','florence_vocab.json','florence_merges.txt'];let ok=true;for(const f of need){const fp=p.join(dir,f);if(!fs.existsSync(fp)){console.error('MISSING:',f);ok=false;continue;}const sz=fs.statSync(fp).size;console.log('OK',f,(sz/1024/1024).toFixed(2)+'MB');}if(!ok)process.exit(1);"
         shell: cmd
 
-      # 7. Build the React renderer + Electron .exe installer
       - name: Build Windows installer
         run: npm run build:win
         shell: cmd
         env:
-          # electron-builder needs this on CI to avoid trying to sign
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # 8. List output (for debugging build issues)
       - name: List release contents
         run: dir release
         shell: cmd
 
-      # 9. Upload the installer as a downloadable artifact (90-day retention)
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
@@ -86,7 +74,6 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-      # 10. If this is a tag push, also create a GitHub Release with the .exe
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

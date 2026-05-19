@@ -124,7 +124,7 @@ function register(getMainWindow) {
       const row = db.getImageById(imageId);
       if (!row) return ok(null);
       // Don't send embedding blob over IPC — it's large and useless to renderer
-      delete row.embedding;
+      delete row.embedding; delete row.caption_embedding;
       return ok(row);
     } catch (e) { return fail(e); }
   });
