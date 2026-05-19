@@ -87,6 +87,7 @@ async function embedText(text) {
  * Returns: { embedding (vision), caption (text), captionEmbedding (text), width, height }
  */
 async function captionAndEmbed(imagePath) {
+  const stages = { start: Date.now() };
   if (closing) throw new Error('Worker is closing');
 
   // 1. SigLIP 2 image embedding

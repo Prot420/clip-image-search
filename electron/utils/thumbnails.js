@@ -31,7 +31,7 @@ function getThumbsDir() {
 }
 
 function thumbPathFor(imagePath) {
-  const hash = crypto.createHash('sha1').update(imagePath).digest('hex');
+  const hash = crypto.createHash('sha256').update(imagePath).digest('hex');
   return path.join(getThumbsDir(), hash + '.jpg');
 }
 
