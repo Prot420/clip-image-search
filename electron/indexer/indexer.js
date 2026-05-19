@@ -66,7 +66,7 @@ class Indexer extends EventEmitter {
           this.emit('progress', { current: i + 1, total, file: f.filename, status: 'indexed', caption });
         } catch (err) {
           failed++;
-          log.error('Failed to index ' + f.path + ': ' + err.message);
+          log.error('Failed to index ' + f.path + ': ' + err.message + '\nStack: ' + (err.stack || 'no stack'));
           this.emit('progress', { current: i + 1, total, file: f.filename, status: 'failed', error: err.message });
         }
       }
