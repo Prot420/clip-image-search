@@ -4,11 +4,11 @@ import { electron } from '../hooks/useElectronAPI';
 import { useDebounce } from '../hooks/useDebounce';
 
 export default function SearchBar() {
-  const query     = useStore(s => s.query);
-  const setQuery  = useStore(s => s.setQuery);
+  const query      = useStore(s => s.query);
+  const setQuery   = useStore(s => s.setQuery);
   const setResults = useStore(s => s.setResults);
   const setSearching = useStore(s => s.setSearching);
-  const searching = useStore(s => s.searching);
+  const searching  = useStore(s => s.searching);
   const setSearchMode = useStore(s => s.setSearchMode);
 
   const debouncedQuery = useDebounce(query, 250);
@@ -23,7 +23,7 @@ export default function SearchBar() {
       setSearching(true);
       setSearchMode('text');
       try {
-        const r = await electron.searchByText(debouncedQuery, 120);
+        const r = await electron.searchByText(debouncedQuery);
         if (!cancelled) setResults(r);
       } catch (e) {
         console.error('Search failed:', e);
@@ -43,12 +43,24 @@ export default function SearchBar() {
           type="text"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder='Try: "wood handle caddy", "round lazy susan", "gold metal bowl"...'
-          className="w-full bg-bg-card border border-border-subtle focus:border-accent text-text-primary placeholder-text-muted px-4 py-3 rounded-md outline-none transition"
+          placeholder='Describe an item — “wood handle caddy”, “round lazy susan”, “gold metal bowl”…'
+          className="w-full bg-bg-card border border-border-subtle focus:border-accent text-text-primary placeholder-text-muted pl-4 pr-24 py-3 rounded-md outline-none transition"
           autoFocus
         />
         {searching && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted">searching...</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-text-muted">
+            <span className="spinner-sm" />
+            Searching
+          </span>
+        )}
+        {!searching && query && (
+          <button
+            onClick={() => setQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary text-sm transition"
+            title="Clear"
+          >
+            ✕
+          </button>
         )}
       </div>
     </div>

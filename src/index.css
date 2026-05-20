@@ -24,3 +24,41 @@ button:focus-visible, input:focus-visible {
 
 .drag-region { -webkit-app-region: drag; }
 .no-drag      { -webkit-app-region: no-drag; }
+
+/* --- result card hover --- */
+.card {
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+.card:hover {
+  border-color: #5b8def;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(91, 141, 239, 0.25);
+  transform: translateY(-2px);
+}
+.card-img {
+  transition: transform 0.28s cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+.card:hover .card-img {
+  transform: scale(1.06);
+}
+
+/* --- loading spinner --- */
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid #2e2e38;
+  border-top-color: #5b8def;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #2e2e38;
+  border-top-color: #5b8def;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

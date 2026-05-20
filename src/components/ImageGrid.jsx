@@ -2,12 +2,19 @@ import { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useStore } from '../store/useStore';
 
-const CARD_SIZE = 180;
-const GAP = 12;
+const CARD_SIZE = 184;
+const GAP = 14;
+
+function scoreColor(score) {
+  if (score >= 0.45) return '#3fb950';   // strong match — green
+  if (score >= 0.35) return '#d29922';   // medium — amber
+  return '#8b949e';                       // weak — grey
+}
 
 export default function ImageGrid() {
   const results = useStore(s => s.results);
   const query   = useStore(s => s.query);
+  const searching = useStore(s => s.searching);
   const setSelectedImage = useStore(s => s.setSelectedImage);
 
   const parentRef = useRef(null);
@@ -26,20 +33,42 @@ export default function ImageGrid() {
     overscan: 3
   });
 
+  // Empty states
   if (results.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-text-muted">
-        {query.trim()
-          ? <div className="text-center"><div className="text-sm">No matches for "{query}"</div><div className="text-xs mt-1">Try a different description.</div></div>
-          : <div className="text-center"><div className="text-sm">Type a description to search</div><div className="text-xs mt-1">Natural language works best: "wood handle caddy", "round tray"</div></div>
-        }
+      <div className="flex-1 flex items-center justify-center text-text-muted select-none">
+        {searching ? (
+          <div className="text-center">
+            <div className="spinner mx-auto mb-3" />
+            <div className="text-sm">Searching…</div>
+          </div>
+        ) : query.trim() ? (
+          <div className="text-center max-w-sm px-6">
+            <div className="text-3xl mb-3 opacity-40">⌕</div>
+            <div className="text-sm text-text-secondary">No matches for “{query}”</div>
+            <div className="text-xs mt-1.5">Try describing the item differently — material, shape, or colour.</div>
+          </div>
+        ) : (
+          <div className="text-center max-w-sm px-6">
+            <div className="text-3xl mb-3 opacity-40">⌕</div>
+            <div className="text-sm text-text-secondary">Search your catalogue</div>
+            <div className="text-xs mt-1.5">Describe what you're looking for — e.g. “round wooden tray”, “iron caddy with handle”.</div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div ref={parentRef} className="flex-1 overflow-y-auto px-6 py-4">
-      <div className="text-xs text-text-muted mb-3">{results.length} results</div>
+      <div className="flex items-baseline gap-2 mb-4">
+        <span className="text-sm font-medium text-text-primary">{results.length}</span>
+        <span className="text-xs text-text-muted">
+          {results.length === 1 ? 'result' : 'results'} for
+        </span>
+        <span className="text-xs text-text-secondary truncate">“{query}”</span>
+      </div>
+
       <div
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,
@@ -67,22 +96,39 @@ export default function ImageGrid() {
                 const idx = rowIdx * cols + colIdx;
                 const item = results[idx];
                 if (!item) return null;
+                const pct = Math.round(item.score * 100);
                 return (
                   <button
                     key={item.id}
                     onClick={() => setSelectedImage(item)}
-                    className="group relative bg-bg-card border border-border-subtle hover:border-accent rounded-md overflow-hidden transition focus:outline-none focus:border-accent"
+                    className="card group relative bg-bg-card border border-border-subtle rounded-lg overflow-hidden focus:outline-none"
                     style={{ width: CARD_SIZE, height: CARD_SIZE }}
                   >
-                    <img
-                      src={`thumb://image/${item.id}`}
-                      alt={item.filename}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent p-2 text-left">
-                      <div className="text-[10px] font-medium truncate">{item.filename}</div>
-                      <div className="text-[9px] text-text-muted">score {item.score.toFixed(3)}</div>
+                    <div className="w-full h-full overflow-hidden">
+                      <img
+                        src={`thumb://image/${item.id}`}
+                        alt={item.filename}
+                        loading="lazy"
+                        className="card-img w-full h-full object-cover"
+                      />
+                    </div>
+
+                    {/* score badge — top right */}
+                    <div
+                      className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[9px] font-semibold tabular-nums"
+                      style={{
+                        background: 'rgba(0,0,0,0.72)',
+                        color: scoreColor(item.score)
+                      }}
+                    >
+                      {pct}%
+                    </div>
+
+                    {/* filename — bottom */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pt-5 pb-1.5 text-left">
+                      <div className="text-[10px] font-medium text-text-primary truncate">
+                        {item.filename}
+                      </div>
                     </div>
                   </button>
                 );
