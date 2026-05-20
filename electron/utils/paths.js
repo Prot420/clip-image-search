@@ -40,6 +40,11 @@ function getModelsDir() {
   if (process.resourcesPath) {
     return path.join(process.resourcesPath, 'models');
   }
+  // Worker threads: process.resourcesPath may be undefined. Try worker-injected path.
+  try {
+    const { workerData } = require('worker_threads');
+    if (workerData && workerData.modelsDir) return workerData.modelsDir;
+  } catch {}
   return path.join(PROJECT_ROOT, 'resources', 'models');
 }
 

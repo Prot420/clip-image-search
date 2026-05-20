@@ -15,6 +15,7 @@ let closing = false;
 const { preprocessImage } = require('./preprocessor');
 const { tokenize, MAX_LENGTH } = require('./tokenizer');
 const captioner = require('./captioner');
+captioner.setModelsDir(modelsDir);
 
 function l2Normalize(vec) {
   let s = 0; for (let i = 0; i < vec.length; i++) s += vec[i] * vec[i];

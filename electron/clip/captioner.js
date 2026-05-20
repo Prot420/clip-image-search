@@ -13,6 +13,11 @@ const path = require('path');
 const fs = require('fs');
 const { getModelsDir, getUserDataDir } = require('../utils/paths');
 
+// Worker threads can't resolve process.resourcesPath. Allow explicit override.
+let explicitModelsDir = null;
+function setModelsDir(dir) { explicitModelsDir = dir; }
+function resolveModelsDir() { return explicitModelsDir || getModelsDir(); }
+
 const TASK_DETAILED = '<MORE_DETAILED_CAPTION>';
 const TASK_SHORT = '<CAPTION>';
 const MAX_NEW_TOKENS_DETAILED = 100;
@@ -55,7 +60,7 @@ function isStagingValid(staging) {
 function prepareStagingDir() {
   if (stagingDir && isStagingValid(stagingDir)) return stagingDir;
 
-  const modelsDir = getModelsDir();
+  const modelsDir = resolveModelsDir();
   const staging = path.join(getUserDataDir(), 'florence_staging');
 
   // If exists and valid, reuse (no delete!)
@@ -161,4 +166,4 @@ async function close() {
   tokenizer = null;
 }
 
-module.exports = { init, captionImage, close };
+module.exports = { init, captionImage, close, setModelsDir };
