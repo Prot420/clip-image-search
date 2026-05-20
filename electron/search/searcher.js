@@ -21,13 +21,16 @@ const db = require('../db/database');
 const clip = require('../clip/clipWorker');
 const log = require('../utils/logger');
 
-// Keyword boost multipliers (tiered — see Wands furniture benchmark).
-const BOOST_ALL  = 10.0;  // every meaningful query word present in caption
-const BOOST_SOME = 3.0;   // at least one query word present
+// Keyword boost: proportional to how many query words match the caption.
+// boost = 1 + KEYWORD_WEIGHT * (matched / total). A smooth curve avoids a
+// cliff where one all-words match drops every partial match below cutoff.
 // No query word in caption -> image is dropped entirely (boost = 0).
 
 // Keep results scoring at least this fraction of the top result.
 const RELATIVE_FLOOR = 0.55;
+
+// How strongly keyword matches influence the score.
+const KEYWORD_WEIGHT = 4.0;
 
 // Common words ignored during keyword matching (no discriminative value).
 const STOPWORDS = new Set([
@@ -105,9 +108,9 @@ function keywordBoost(queryWords, captionWordSet) {
   for (const w of queryWords) {
     if (captionWordSet.has(w)) matched++;
   }
-  if (matched === queryWords.length) return BOOST_ALL;
-  if (matched > 0)                   return BOOST_SOME;
-  return 0;  // no query word in caption -> drop this image
+  if (matched === 0) return 0;  // no query word -> drop
+  // Proportional, smooth boost — partial matches stay competitive.
+  return 1 + KEYWORD_WEIGHT * (matched / queryWords.length);
 }
 
 function rankResults(queryVec, queryWords) {
