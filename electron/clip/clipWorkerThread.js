@@ -87,17 +87,31 @@ async function embedText(text) {
  * Returns: { embedding (vision), caption (text), captionEmbedding (text), width, height }
  */
 async function captionAndEmbed(imagePath) {
-  const stages = { start: Date.now() };
   if (closing) throw new Error('Worker is closing');
 
-  // 1. SigLIP 2 image embedding
-  const { embedding: visionEmb, width, height } = await embedImage(imagePath);
+  let visionEmb, width, height, caption, captionEmbedding;
 
-  // 2. Florence-2 caption
-  const caption = await captioner.captionImage(imagePath);
+  // STAGE 1: SigLIP 2 image embedding
+  try {
+    const r = await embedImage(imagePath);
+    visionEmb = r.embedding; width = r.width; height = r.height;
+  } catch (e) {
+    throw new Error('STAGE1_EMBED_IMAGE failed: ' + e.message + ' | stack: ' + (e.stack || 'none'));
+  }
 
-  // 3. Caption -> SigLIP 2 text embedding (for combined search)
-  const captionEmbedding = await embedText(caption);
+  // STAGE 2: Florence-2 caption
+  try {
+    caption = await captioner.captionImage(imagePath);
+  } catch (e) {
+    throw new Error('STAGE2_CAPTION failed: ' + e.message + ' | stack: ' + (e.stack || 'none'));
+  }
+
+  // STAGE 3: caption -> SigLIP 2 text embedding
+  try {
+    captionEmbedding = await embedText(caption);
+  } catch (e) {
+    throw new Error('STAGE3_EMBED_TEXT failed: ' + e.message + ' | stack: ' + (e.stack || 'none'));
+  }
 
   return { embedding: visionEmb, caption, captionEmbedding, width, height };
 }
