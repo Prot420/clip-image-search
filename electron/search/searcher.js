@@ -24,7 +24,7 @@ const log = require('../utils/logger');
 // Keyword boost multipliers (tiered — see Wands furniture benchmark).
 const BOOST_ALL  = 10.0;  // every meaningful query word present in caption
 const BOOST_SOME = 3.0;   // at least one query word present
-const BOOST_NONE = 0.3;   // no query words — visual-only fallback
+// No query word in caption -> image is dropped entirely (boost = 0).
 
 // Keep results scoring at least this fraction of the top result.
 const RELATIVE_FLOOR = 0.55;
@@ -107,7 +107,7 @@ function keywordBoost(queryWords, captionWordSet) {
   }
   if (matched === queryWords.length) return BOOST_ALL;
   if (matched > 0)                   return BOOST_SOME;
-  return BOOST_NONE;
+  return 0;  // no query word in caption -> drop this image
 }
 
 function rankResults(queryVec, queryWords) {
@@ -123,11 +123,15 @@ function rankResults(queryVec, queryWords) {
     combined[i] = vis[i] * keywordBoost(queryWords, captionWords[i]);
   }
 
-  const indices = Array.from({ length: n }, (_, i) => i);
+  let indices = Array.from({ length: n }, (_, i) => i);
+
+  // Drop images with no keyword match at all (combined score 0).
+  indices = indices.filter(idx => combined[idx] > 0);
+  if (indices.length === 0) return [];
+
   indices.sort((a, b) => combined[b] - combined[a]);
 
   const best = combined[indices[0]];
-  if (best <= 0) return [];
 
   // Keep results within RELATIVE_FLOOR of the top combined score.
   const cutoff = best * RELATIVE_FLOOR;
