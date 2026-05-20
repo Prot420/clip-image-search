@@ -1,32 +1,50 @@
 /**
  * electron/search/searcher.js
  *
- * Pure AI semantic search — no manual synonym map.
- *   final_score = ALPHA * image_cosine + BETA * caption_cosine
+ * Hybrid search: SigLIP visual similarity + caption keyword matching.
  *
- * Ranking:
- *   - Results sorted by score (best first).
- *   - No fixed result cap — all genuinely relevant items show
- *     (important for large catalogs with many similar products).
- *   - Relative threshold drops clear junk: keeps results within
- *     RELATIVE_FLOOR of the top score. Adapts per-query since scores
- *     are relative, not absolute.
+ * Why hybrid: SigLIP is trained on long sentences, so short queries
+ * ("wooden bowl") produce a narrow band of cosine scores that can't
+ * separate hits from junk on their own. Florence-2 has already written
+ * a descriptive caption for every image; matching the query's words
+ * against that caption is a strong, reliable signal that works well
+ * for short queries — and gives near-zero score to things not in the
+ * catalogue ("car tyre").
+ *
+ * final_score = visual_cosine  *  keyword_boost
+ *   keyword_boost: all query words in caption -> large boost
+ *                  some words                 -> medium boost
+ *                  no words                   -> small (visual-only fallback)
  */
 
 const db = require('../db/database');
 const clip = require('../clip/clipWorker');
 const log = require('../utils/logger');
 
-const ALPHA = 0.5;
-const BETA  = 0.5;
+// Keyword boost multipliers (tiered — see Wands furniture benchmark).
+const BOOST_ALL  = 10.0;  // every meaningful query word present in caption
+const BOOST_SOME = 3.0;   // at least one query word present
+const BOOST_NONE = 0.3;   // no query words — visual-only fallback
 
 // Keep results scoring at least this fraction of the top result.
 const RELATIVE_FLOOR = 0.55;
-// If even the best match is weaker than this, show nothing.
-const ABSOLUTE_MIN   = 0.20;
+
+// Common words ignored during keyword matching (no discriminative value).
+const STOPWORDS = new Set([
+  'a','an','the','of','with','and','or','for','in','on','to','is','it',
+  'this','that','some','any','my','your','at','by','as'
+]);
 
 let cache = null;
 let cacheCount = 0;
+
+function tokenize(text) {
+  return (text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !STOPWORDS.has(w));
+}
 
 function loadCache() {
   const rows = db.loadAllEmbeddings();
@@ -41,24 +59,20 @@ function loadCache() {
   const paths = new Array(n);
   const filenames = new Array(n);
   const captions = new Array(n);
+  const captionWords = new Array(n);   // pre-tokenized caption for keyword match
   const imgFlat = new Float32Array(n * dim);
-  const capFlat = new Float32Array(n * dim);
-  const hasCap = new Uint8Array(n);
 
   for (let i = 0; i < n; i++) {
     const r = rows[i];
     ids[i] = r.id;
     paths[i] = r.path;
     filenames[i] = r.filename;
-    captions[i] = r.caption;
+    captions[i] = r.caption || '';
+    captionWords[i] = new Set(tokenize(r.caption));
     imgFlat.set(r.embedding, i * dim);
-    if (r.captionEmbedding) {
-      capFlat.set(r.captionEmbedding, i * dim);
-      hasCap[i] = 1;
-    }
   }
 
-  cache = { ids, paths, filenames, captions, imgFlat, capFlat, hasCap, dim };
+  cache = { ids, paths, filenames, captions, captionWords, imgFlat, dim };
   cacheCount = n;
   log.info('Search cache: ' + n + ' embeddings, dim=' + dim);
   return cache;
@@ -66,43 +80,64 @@ function loadCache() {
 
 function invalidateCache() { cache = null; cacheCount = 0; }
 
-function scoreImages(queryVec) {
-  if (!cache || cacheCount === 0) return new Float32Array(0);
-  const { imgFlat, capFlat, hasCap, dim } = cache;
+/**
+ * Visual cosine similarity between query vector and every image embedding.
+ */
+function visualScores(queryVec) {
+  const { imgFlat, dim } = cache;
   const n = cacheCount;
   const scores = new Float32Array(n);
-
   for (let i = 0; i < n; i++) {
     const off = i * dim;
-    let imgSim = 0, capSim = 0;
-    for (let j = 0; j < dim; j++) {
-      imgSim += queryVec[j] * imgFlat[off + j];
-      if (hasCap[i]) capSim += queryVec[j] * capFlat[off + j];
-    }
-    scores[i] = hasCap[i] ? (ALPHA * imgSim + BETA * capSim) : imgSim;
+    let s = 0;
+    for (let j = 0; j < dim; j++) s += queryVec[j] * imgFlat[off + j];
+    scores[i] = s;
   }
   return scores;
 }
 
-function rankResults(scores) {
-  const { ids, paths, filenames, captions } = cache;
+/**
+ * Keyword boost for one image, given the set of query words.
+ */
+function keywordBoost(queryWords, captionWordSet) {
+  if (queryWords.length === 0) return 1.0; // no keywords -> neutral
+  let matched = 0;
+  for (const w of queryWords) {
+    if (captionWordSet.has(w)) matched++;
+  }
+  if (matched === queryWords.length) return BOOST_ALL;
+  if (matched > 0)                   return BOOST_SOME;
+  return BOOST_NONE;
+}
+
+function rankResults(queryVec, queryWords) {
   const n = cacheCount;
   if (n === 0) return [];
 
+  const { ids, paths, filenames, captions, captionWords } = cache;
+  const vis = visualScores(queryVec);
+
+  // Combine: visual cosine * keyword boost.
+  const combined = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    combined[i] = vis[i] * keywordBoost(queryWords, captionWords[i]);
+  }
+
   const indices = Array.from({ length: n }, (_, i) => i);
-  indices.sort((a, b) => scores[b] - scores[a]);
+  indices.sort((a, b) => combined[b] - combined[a]);
 
-  const best = scores[indices[0]];
-  if (best < ABSOLUTE_MIN) return [];
+  const best = combined[indices[0]];
+  if (best <= 0) return [];
 
+  // Keep results within RELATIVE_FLOOR of the top combined score.
   const cutoff = best * RELATIVE_FLOOR;
-  const kept = indices.filter(idx => scores[idx] >= cutoff);
+  const kept = indices.filter(idx => combined[idx] >= cutoff);
 
   return kept.map(idx => ({
     id: ids[idx],
     path: paths[idx],
     filename: filenames[idx],
-    score: scores[idx],
+    score: combined[idx] / best,   // normalised 0..1 for display
     caption: captions[idx]
   }));
 }
@@ -116,14 +151,15 @@ async function searchByText(query) {
 
   const t0 = Date.now();
   const queryVec = await clip.embedText(query);
+  const queryWords = tokenize(query);
   const embedMs = Date.now() - t0;
 
   const t1 = Date.now();
-  const scores = scoreImages(queryVec);
-  const results = rankResults(scores);
+  const results = rankResults(queryVec, queryWords);
   const searchMs = Date.now() - t1;
 
-  log.debug('Search "' + query + '": ' + results.length + ' results, embed=' + embedMs + 'ms, scan=' + searchMs + 'ms');
+  log.debug('Search "' + query + '" [' + queryWords.join(',') + ']: '
+    + results.length + ' results, embed=' + embedMs + 'ms, scan=' + searchMs + 'ms');
   return results;
 }
 
@@ -137,8 +173,8 @@ async function searchBySimilarImage(imageId) {
   if (idx === -1) return [];
   const dim = cache.dim;
   const queryVec = cache.imgFlat.subarray(idx * dim, (idx + 1) * dim);
-  const scores = scoreImages(queryVec);
-  const results = rankResults(scores);
+  // Image-to-image: pure visual, no keywords.
+  const results = rankResults(queryVec, []);
   return results.filter(r => r.id !== imageId);
 }
 
@@ -146,7 +182,7 @@ function getCacheStats() {
   return {
     loaded: cache !== null,
     count: cacheCount,
-    memoryMB: cache ? (cacheCount * cache.dim * 4 * 2 / 1024 / 1024) : 0
+    memoryMB: cache ? (cacheCount * cache.dim * 4 / 1024 / 1024) : 0
   };
 }
 
