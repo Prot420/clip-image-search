@@ -54,6 +54,18 @@ function getModelsDir() {
  *   Prod: %APPDATA%/CLIP Image Search/
  */
 function getUserDataDir() {
+  // Worker threads: no electron app, but parent injects userDataDir.
+  if (!electronApp) {
+    try {
+      const { workerData } = require('worker_threads');
+      if (workerData && workerData.userDataDir) {
+        if (!fs.existsSync(workerData.userDataDir)) {
+          fs.mkdirSync(workerData.userDataDir, { recursive: true });
+        }
+        return workerData.userDataDir;
+      }
+    } catch {}
+  }
   if (isDev || !electronApp) {
     const devDir = path.join(PROJECT_ROOT, '.userdata');
     if (!fs.existsSync(devDir)) fs.mkdirSync(devDir, { recursive: true });

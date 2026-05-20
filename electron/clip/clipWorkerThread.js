@@ -100,18 +100,26 @@ async function captionAndEmbed(imagePath) {
     throw new Error('STAGE1_EMBED_IMAGE failed: ' + e.message + ' | stack: ' + (e.stack || 'none'));
   }
 
-  // STAGE 2: Florence-2 caption
+  // STAGE 2: Florence-2 caption (non-fatal: image still indexable without caption)
+  let captionFailed = false;
   try {
     caption = await captioner.captionImage(imagePath);
   } catch (e) {
-    throw new Error('STAGE2_CAPTION failed: ' + e.message + ' | stack: ' + (e.stack || 'none'));
+    captionFailed = true;
+    caption = '';
+    console.error('STAGE2_CAPTION failed (non-fatal): ' + e.message);
   }
 
-  // STAGE 3: caption -> SigLIP 2 text embedding
-  try {
-    captionEmbedding = await embedText(caption);
-  } catch (e) {
-    throw new Error('STAGE3_EMBED_TEXT failed: ' + e.message + ' | stack: ' + (e.stack || 'none'));
+  // STAGE 3: caption -> SigLIP 2 text embedding (skip if no caption)
+  if (caption && caption.length > 0) {
+    try {
+      captionEmbedding = await embedText(caption);
+    } catch (e) {
+      console.error('STAGE3_EMBED_TEXT failed (non-fatal): ' + e.message);
+      captionEmbedding = new Float32Array(EMBED_DIM);
+    }
+  } else {
+    captionEmbedding = new Float32Array(EMBED_DIM);
   }
 
   return { embedding: visionEmb, caption, captionEmbedding, width, height };

@@ -1,6 +1,6 @@
 const path = require('path');
 const { Worker } = require('worker_threads');
-const { getModelsDir } = require('../utils/paths');
+const { getModelsDir, getUserDataDir } = require('../utils/paths');
 
 let worker = null;
 let ready = false;
@@ -14,7 +14,7 @@ function startWorker() {
   const workerScript = path.join(__dirname, 'clipWorkerThread.js');
 
   worker = new Worker(workerScript, {
-    workerData: { modelsDir: getModelsDir() }
+    workerData: { modelsDir: getModelsDir(), userDataDir: getUserDataDir() }
   });
 
   readyPromise = new Promise((resolve, reject) => {
