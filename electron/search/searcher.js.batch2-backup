@@ -20,7 +20,6 @@
 const db = require('../db/database');
 const clip = require('../clip/clipWorker');
 const log = require('../utils/logger');
-const { categoryFromQuery } = require('../clip/categorize');
 
 // Keyword boost: proportional to how many query words match the caption.
 // boost = 1 + KEYWORD_WEIGHT * (matched / total). A smooth curve avoids a
@@ -64,7 +63,6 @@ function loadCache() {
   const filenames = new Array(n);
   const captions = new Array(n);
   const captionWords = new Array(n);   // pre-tokenized caption for keyword match
-  const categories = new Array(n);     // optional product category per image
   const imgFlat = new Float32Array(n * dim);
 
   for (let i = 0; i < n; i++) {
@@ -74,7 +72,6 @@ function loadCache() {
     filenames[i] = r.filename;
     captions[i] = r.caption || '';
     captionWords[i] = new Set(tokenize(r.caption));
-    categories[i] = r.category || null;
     imgFlat.set(r.embedding, i * dim);
   }
 
@@ -91,7 +88,7 @@ function loadCache() {
     idf.set(w, Math.log(1 + n / df));
   }
 
-  cache = { ids, paths, filenames, captions, captionWords, categories, imgFlat, dim, idf };
+  cache = { ids, paths, filenames, captions, captionWords, imgFlat, dim, idf };
   cacheCount = n;
   log.info('Search cache: ' + n + ' embeddings, dim=' + dim);
   return cache;
@@ -140,11 +137,11 @@ function keywordBoost(queryWords, captionWordSet) {
   return 1 + KEYWORD_WEIGHT * (matchedWeight / totalWeight);
 }
 
-function rankResults(queryVec, queryWords, filterCategory) {
+function rankResults(queryVec, queryWords) {
   const n = cacheCount;
   if (n === 0) return [];
 
-  const { ids, paths, filenames, captions, captionWords, categories } = cache;
+  const { ids, paths, filenames, captions, captionWords } = cache;
   const vis = visualScores(queryVec);
 
   // Combine: visual cosine * keyword boost.
@@ -165,15 +162,7 @@ function rankResults(queryVec, queryWords, filterCategory) {
 
   // Keep results within RELATIVE_FLOOR of the top combined score.
   const cutoff = best * RELATIVE_FLOOR;
-  let kept = indices.filter(idx => combined[idx] >= cutoff);
-
-  // Optional category filter — applied ONLY when the query named a
-  // category. Narrows an already-ranked list; never changes scoring.
-  // If filtering would remove everything, the unfiltered list stands.
-  if (filterCategory) {
-    const filtered = kept.filter(idx => categories[idx] === filterCategory);
-    if (filtered.length > 0) kept = filtered;
-  }
+  const kept = indices.filter(idx => combined[idx] >= cutoff);
 
   return kept.map(idx => ({
     id: ids[idx],
@@ -197,8 +186,7 @@ async function searchByText(query) {
   const embedMs = Date.now() - t0;
 
   const t1 = Date.now();
-  const filterCategory = categoryFromQuery(query);
-  const results = rankResults(queryVec, queryWords, filterCategory);
+  const results = rankResults(queryVec, queryWords);
   const searchMs = Date.now() - t1;
 
   log.debug('Search "' + query + '" [' + queryWords.join(',') + ']: '

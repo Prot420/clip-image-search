@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { getDatabasePath } = require('../utils/paths');
 const { SCHEMA_VERSION, SCHEMA_SQL } = require('./schema');
+const log = require('../utils/logger');
 
 let db = null;
 let stmts = null;
@@ -24,7 +25,14 @@ function init() {
   if (currentVersion === null) {
     setSetting('schema_version', String(SCHEMA_VERSION));
   } else if (parseInt(currentVersion, 10) !== SCHEMA_VERSION) {
-    throw new Error('Schema version mismatch: DB v' + currentVersion + ', code v' + SCHEMA_VERSION + '. Delete DB and re-index.');
+    // Schema changed between versions. Rather than crashing, drop the
+    // image/folder data and let the user re-index on the new schema.
+    // Backups remain restorable because restore re-runs this same path.
+    const oldV = currentVersion;
+    log.warn('[db] Schema upgrade: v' + oldV + ' -> v' + SCHEMA_VERSION + '. Clearing old indexed data; a re-index is required.');
+    db.exec('DROP TABLE IF EXISTS images; DROP TABLE IF EXISTS folders;');
+    db.exec(SCHEMA_SQL);
+    setSetting('schema_version', String(SCHEMA_VERSION));
   }
 
   prepareStatements();
@@ -47,8 +55,8 @@ function prepareStatements() {
     updateFolderLastScan: db.prepare('UPDATE folders SET last_scan = ? WHERE id = ?'),
 
     insertImage: db.prepare(`
-      INSERT INTO images (path, filename, folder_id, file_size, file_mtime, width, height, embedding, caption, caption_embedding, indexed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO images (path, filename, folder_id, file_size, file_mtime, width, height, embedding, caption, caption_embedding, category, indexed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(path) DO UPDATE SET
         file_size         = excluded.file_size,
         file_mtime        = excluded.file_mtime,
@@ -57,13 +65,14 @@ function prepareStatements() {
         embedding         = excluded.embedding,
         caption           = excluded.caption,
         caption_embedding = excluded.caption_embedding,
+        category          = excluded.category,
         indexed_at        = excluded.indexed_at
     `),
     getImageByPath: db.prepare('SELECT id, file_mtime, file_size FROM images WHERE path = ?'),
     getImageById: db.prepare('SELECT * FROM images WHERE id = ?'),
     deleteImageByPath: db.prepare('DELETE FROM images WHERE path = ?'),
     countImages: db.prepare('SELECT COUNT(*) AS c FROM images'),
-    listAllEmbeddings: db.prepare('SELECT id, path, filename, embedding, caption, caption_embedding FROM images')
+    listAllEmbeddings: db.prepare('SELECT id, path, filename, embedding, caption, caption_embedding, category FROM images')
   };
 }
 
@@ -83,7 +92,7 @@ function listFolders() { return stmts.listFolders.all(); }
 function deleteFolder(id) { return stmts.deleteFolder.run(id); }
 function updateFolderLastScan(id) { stmts.updateFolderLastScan.run(Date.now(), id); }
 
-function upsertImage({ path: imgPath, filename, folderId, fileSize, fileMtime, width, height, embedding, caption, captionEmbedding }) {
+function upsertImage({ path: imgPath, filename, folderId, fileSize, fileMtime, width, height, embedding, caption, captionEmbedding, category }) {
   if (!(embedding instanceof Float32Array)) throw new Error('embedding must be Float32Array');
   const buf = Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength);
 
@@ -93,7 +102,7 @@ function upsertImage({ path: imgPath, filename, folderId, fileSize, fileMtime, w
     capBuf = Buffer.from(captionEmbedding.buffer, captionEmbedding.byteOffset, captionEmbedding.byteLength);
   }
 
-  stmts.insertImage.run(imgPath, filename, folderId, fileSize, fileMtime, width, height, buf, caption || null, capBuf, Date.now());
+  stmts.insertImage.run(imgPath, filename, folderId, fileSize, fileMtime, width, height, buf, caption || null, capBuf, category || null, Date.now());
 }
 
 const upsertImagesBatch = (records) => {
@@ -114,6 +123,7 @@ function loadAllEmbeddings() {
     filename: r.filename,
     embedding: new Float32Array(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength / 4),
     caption: r.caption || '',
+    category: r.category || null,
     captionEmbedding: r.caption_embedding
       ? new Float32Array(r.caption_embedding.buffer, r.caption_embedding.byteOffset, r.caption_embedding.byteLength / 4)
       : null

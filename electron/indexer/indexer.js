@@ -3,6 +3,7 @@ const path = require('path');
 const db = require('../db/database');
 const clip = require('../clip/clipWorker');
 const { scanFolder } = require('./scanner');
+const { categorize } = require('../clip/categorize');
 const log = require('../utils/logger');
 
 const BATCH_SIZE = 10;
@@ -74,6 +75,9 @@ class Indexer extends EventEmitter {
           log.info('  Caption preview: ' + (result.caption || '').substring(0, 80));
           log.info('  Width x Height: ' + result.width + 'x' + result.height);
 
+          const category = categorize(result.caption);
+          log.info('  Category: ' + (category || 'none'));
+
           batch.push({
             path: f.path,
             filename: f.filename,
@@ -84,7 +88,8 @@ class Indexer extends EventEmitter {
             height: result.height,
             embedding: result.embedding,
             caption: result.caption,
-            captionEmbedding: result.captionEmbedding
+            captionEmbedding: result.captionEmbedding,
+            category: category
           });
           indexed++;
           log.info('Added to batch (size now: ' + batch.length + ')');
@@ -156,7 +161,8 @@ class Indexer extends EventEmitter {
         height: result.height,
         embedding: result.embedding,
         caption: result.caption,
-        captionEmbedding: result.captionEmbedding
+        captionEmbedding: result.captionEmbedding,
+        category: categorize(result.caption)
       });
       log.info('Indexed (single): ' + filePath);
       return { status: 'indexed', caption: result.caption };

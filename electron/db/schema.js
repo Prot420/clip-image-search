@@ -1,4 +1,4 @@
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS folders (
@@ -21,6 +21,7 @@ const SCHEMA_SQL = `
     embedding         BLOB NOT NULL,
     caption           TEXT,
     caption_embedding BLOB,
+    category          TEXT,
     indexed_at        INTEGER NOT NULL,
     FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
   );
@@ -29,6 +30,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_images_folder   ON images(folder_id);
   CREATE INDEX IF NOT EXISTS idx_images_mtime    ON images(file_mtime);
   CREATE INDEX IF NOT EXISTS idx_images_caption  ON images(caption);
+  CREATE INDEX IF NOT EXISTS idx_images_category ON images(category);
 
   CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,

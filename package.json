@@ -1,6 +1,6 @@
 {
   "name": "clip-image-search",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Local AI-powered image search using CLIP. Fully offline, Electron + React + SQLite.",
   "main": "electron/main.js",
   "author": "Your Company",
