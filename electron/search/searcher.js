@@ -75,7 +75,20 @@ function loadCache() {
     imgFlat.set(r.embedding, i * dim);
   }
 
-  cache = { ids, paths, filenames, captions, captionWords, imgFlat, dim };
+  // Inverse document frequency: words in many captions are weak signals
+  // (e.g. "wooden"), rare words are strong (e.g. "spoon", "marble").
+  const docFreq = new Map();
+  for (let i = 0; i < n; i++) {
+    for (const w of captionWords[i]) {
+      docFreq.set(w, (docFreq.get(w) || 0) + 1);
+    }
+  }
+  const idf = new Map();
+  for (const [w, df] of docFreq) {
+    idf.set(w, Math.log(1 + n / df));
+  }
+
+  cache = { ids, paths, filenames, captions, captionWords, imgFlat, dim, idf };
   cacheCount = n;
   log.info('Search cache: ' + n + ' embeddings, dim=' + dim);
   return cache;
@@ -104,13 +117,24 @@ function visualScores(queryVec) {
  */
 function keywordBoost(queryWords, captionWordSet) {
   if (queryWords.length === 0) return 1.0; // no keywords -> neutral
-  let matched = 0;
+
+  const idf = cache.idf;
+  let matchedWeight = 0;
+  let totalWeight = 0;
+  let anyMatch = false;
+
   for (const w of queryWords) {
-    if (captionWordSet.has(w)) matched++;
+    const weight = idf.get(w) || Math.log(1 + cacheCount); // unknown word = rare
+    totalWeight += weight;
+    if (captionWordSet.has(w)) {
+      matchedWeight += weight;
+      anyMatch = true;
+    }
   }
-  if (matched === 0) return 0;  // no query word -> drop
-  // Proportional, smooth boost — partial matches stay competitive.
-  return 1 + KEYWORD_WEIGHT * (matched / queryWords.length);
+
+  if (!anyMatch) return 0;  // no query word in caption -> drop
+  // Boost by the fraction of *important* words matched (IDF-weighted).
+  return 1 + KEYWORD_WEIGHT * (matchedWeight / totalWeight);
 }
 
 function rankResults(queryVec, queryWords) {
