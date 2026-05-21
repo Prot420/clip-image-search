@@ -30,5 +30,11 @@ export const electron = {
 
   getStats: () => unwrap(api.getStats()),
 
+  backupDatabase:  () => unwrap(api.backupDatabase()),
+  restoreDatabase: () => unwrap(api.restoreDatabase()),
+
+  exportLogs:     () => unwrap(api.exportLogs()),
+  openLogsFolder: () => unwrap(api.openLogsFolder()),
+
   on: (channel, cb) => api ? api.on(channel, cb) : () => {}
 };

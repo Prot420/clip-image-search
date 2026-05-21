@@ -120,6 +120,48 @@ function loadAllEmbeddings() {
   }));
 }
 
+/**
+ * Backup: copies the live SQLite database to destPath.
+ * Uses better-sqlite3's online backup so it is safe even while the DB is open.
+ */
+async function backupDatabase(destPath) {
+  if (!db) throw new Error('Database not initialised');
+  // better-sqlite3 backup() returns a promise-like; await completes the copy.
+  await db.backup(destPath);
+  return { path: destPath };
+}
+
+/**
+ * Restore: replaces the live database file with the one at srcPath.
+ * Closes the DB, swaps the file, re-opens. Caller must re-init afterwards.
+ */
+function restoreDatabase(srcPath) {
+  if (!fs.existsSync(srcPath)) throw new Error('Backup file not found: ' + srcPath);
+
+  // Validate it is actually a SQLite database before overwriting.
+  const test = new Database(srcPath, { readonly: true });
+  try {
+    const hasImages = test.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='images'"
+    ).get();
+    if (!hasImages) throw new Error('Selected file is not a valid CLIP Search database');
+  } finally {
+    test.close();
+  }
+
+  const dbPath = getDatabasePath();
+  close();  // closes current db, clears stmts
+
+  // Remove WAL/SHM side files so the restored DB is consistent.
+  for (const ext of ['', '-wal', '-shm']) {
+    const p = dbPath + ext;
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  }
+
+  fs.copyFileSync(srcPath, dbPath);
+  return { restored: true };
+}
+
 function close() {
   if (db) { db.close(); db = null; stmts = null; }
 }
@@ -131,5 +173,6 @@ module.exports = {
   addFolder, listFolders, deleteFolder, updateFolderLastScan,
   upsertImage, upsertImagesBatch,
   getImageMetaByPath, getImageById, deleteImageByPath, countImages,
-  loadAllEmbeddings
+  loadAllEmbeddings,
+  backupDatabase, restoreDatabase
 };

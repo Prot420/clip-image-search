@@ -147,6 +147,73 @@ function register(getMainWindow) {
     } catch (e) { return fail(e); }
   });
 
+  // ---------- Database backup / restore ----------
+  ipcMain.handle('db:backup', async () => {
+    try {
+      const win = getMainWindow();
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const result = await dialog.showSaveDialog(win, {
+        title: 'Save Database Backup',
+        defaultPath: 'clip-search-backup-' + ts + '.db',
+        filters: [{ name: 'Database Backup', extensions: ['db'] }]
+      });
+      if (result.canceled || !result.filePath) return ok(null);
+      await db.backupDatabase(result.filePath);
+      log.info('[ipc] DB backed up to ' + result.filePath);
+      return ok({ path: result.filePath });
+    } catch (e) { return fail(e); }
+  });
+
+  ipcMain.handle('db:restore', async () => {
+    try {
+      const win = getMainWindow();
+      const result = await dialog.showOpenDialog(win, {
+        title: 'Select Database Backup to Restore',
+        properties: ['openFile'],
+        filters: [{ name: 'Database Backup', extensions: ['db'] }]
+      });
+      if (result.canceled || result.filePaths.length === 0) return ok(null);
+
+      try { watcher.stopAll && watcher.stopAll(); } catch {}
+
+      db.restoreDatabase(result.filePaths[0]);
+      db.init();
+      searcher.invalidateCache();
+      log.info('[ipc] DB restored from ' + result.filePaths[0]);
+      return ok({ restored: true });
+    } catch (e) { return fail(e); }
+  });
+
+  // ---------- Logs ----------
+  ipcMain.handle('logs:export', async () => {
+    try {
+      const win = getMainWindow();
+      const { getLogsDir } = require('./utils/paths');
+      const logFile = require('path').join(getLogsDir(), 'main.log');
+      if (!fs.existsSync(logFile)) throw new Error('No log file found yet');
+
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const result = await dialog.showSaveDialog(win, {
+        title: 'Export Application Logs',
+        defaultPath: 'clip-search-logs-' + ts + '.log',
+        filters: [{ name: 'Log File', extensions: ['log', 'txt'] }]
+      });
+      if (result.canceled || !result.filePath) return ok(null);
+
+      fs.copyFileSync(logFile, result.filePath);
+      log.info('[ipc] Logs exported to ' + result.filePath);
+      return ok({ path: result.filePath });
+    } catch (e) { return fail(e); }
+  });
+
+  ipcMain.handle('logs:open-folder', () => {
+    try {
+      const { getLogsDir } = require('./utils/paths');
+      shell.openPath(getLogsDir());
+      return ok(true);
+    } catch (e) { return fail(e); }
+  });
+
   // ---------- Stats ----------
   ipcMain.handle('stats:get', () => {
     try {

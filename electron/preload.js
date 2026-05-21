@@ -15,7 +15,10 @@ const ALLOWED_EVENT_CHANNELS = [
   'indexing:complete',
   'indexing:error',
   'watcher:new-image',
-  'watcher:removed-image'
+  'watcher:removed-image',
+  'update:available',
+  'update:progress',
+  'update:downloaded'
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -44,6 +47,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Stats
   getStats: () => ipcRenderer.invoke('stats:get'),
+
+  // Database backup / restore
+  backupDatabase:  () => ipcRenderer.invoke('db:backup'),
+  restoreDatabase: () => ipcRenderer.invoke('db:restore'),
+
+  // Logs
+  exportLogs:     () => ipcRenderer.invoke('logs:export'),
+  openLogsFolder: () => ipcRenderer.invoke('logs:open-folder'),
+
+  // Database backup / restore
+  backupDatabase:  () => ipcRenderer.invoke('db:backup'),
+  restoreDatabase: () => ipcRenderer.invoke('db:restore'),
 
   // Events (main -> renderer)
   on: (channel, callback) => {

@@ -24,6 +24,9 @@ export default function Sidebar() {
   const stats = useStore(s => s.stats);
   const setStats = useStore(s => s.setStats);
   const [err, setErr] = useState(null);
+  const [dbBusy, setDbBusy] = useState(false);
+  const [dbMsg, setDbMsg] = useState(null);
+  const [updateMsg, setUpdateMsg] = useState(null);
   const [indexStartTime, setIndexStartTime] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const unsubsRef = useRef([]);
@@ -48,7 +51,15 @@ export default function Sidebar() {
     });
     const unsubError    = electron.on('indexing:error',    (d) => setErr(d.error || 'Indexing failed'));
 
-    unsubsRef.current = [unsubProgress, unsubScanned, unsubComplete, unsubError];
+    const unsubUpdAvail = electron.on('update:available', (d) =>
+      setUpdateMsg('Update ' + d.version + ' found — downloading…'));
+    const unsubUpdProg  = electron.on('update:progress', (d) =>
+      setUpdateMsg('Downloading update… ' + d.percent + '%'));
+    const unsubUpdDone  = electron.on('update:downloaded', (d) =>
+      setUpdateMsg('Update ' + d.version + ' ready — restart to apply.'));
+
+    unsubsRef.current = [unsubProgress, unsubScanned, unsubComplete, unsubError,
+      unsubUpdAvail, unsubUpdProg, unsubUpdDone];
     return () => {
       for (const fn of unsubsRef.current) { try { fn && fn(); } catch {} }
     };
@@ -104,6 +115,43 @@ export default function Sidebar() {
       setErr(e.message);
       setCancelling(false);
     }
+  }
+
+  async function handleBackup() {
+    if (dbBusy || indexing) return;
+    setErr(null); setDbMsg(null); setDbBusy(true);
+    try {
+      const res = await electron.backupDatabase();
+      if (res) setDbMsg('Backup saved.');
+    } catch (e) {
+      setErr('Backup failed: ' + e.message);
+    } finally { setDbBusy(false); }
+  }
+
+  async function handleRestore() {
+    if (dbBusy || indexing) return;
+    if (!confirm('Restore will replace the current database with the backup. Continue?')) return;
+    setErr(null); setDbMsg(null); setDbBusy(true);
+    try {
+      const res = await electron.restoreDatabase();
+      if (res) {
+        await refresh();
+        setDbMsg('Database restored.');
+      }
+    } catch (e) {
+      setErr('Restore failed: ' + e.message);
+    } finally { setDbBusy(false); }
+  }
+
+  async function handleExportLogs() {
+    if (dbBusy) return;
+    setErr(null); setDbMsg(null); setDbBusy(true);
+    try {
+      const res = await electron.exportLogs();
+      if (res) setDbMsg('Logs exported.');
+    } catch (e) {
+      setErr('Log export failed: ' + e.message);
+    } finally { setDbBusy(false); }
   }
 
   // Compute ETA from elapsed time and progress
@@ -198,6 +246,44 @@ export default function Sidebar() {
             </div>
           );
         })}
+      </div>
+
+      {updateMsg && (
+        <div className="px-5 py-2 text-[11px] text-accent border-t border-border-subtle bg-accent/5">
+          {updateMsg}
+        </div>
+      )}
+
+      <div className="px-5 py-3 border-t border-border-subtle">
+        <div className="flex gap-2">
+          <button
+            onClick={handleBackup}
+            disabled={dbBusy || indexing}
+            className="flex-1 px-2 py-1.5 bg-bg-hover hover:bg-border-subtle disabled:opacity-50 disabled:cursor-not-allowed text-text-primary text-xs rounded transition"
+            title="Save a copy of the indexed database"
+          >
+            {dbBusy ? '…' : 'Backup DB'}
+          </button>
+          <button
+            onClick={handleRestore}
+            disabled={dbBusy || indexing}
+            className="flex-1 px-2 py-1.5 bg-bg-hover hover:bg-border-subtle disabled:opacity-50 disabled:cursor-not-allowed text-text-primary text-xs rounded transition"
+            title="Restore the database from a backup file"
+          >
+            Restore DB
+          </button>
+        </div>
+        <button
+          onClick={handleExportLogs}
+          disabled={dbBusy}
+          className="w-full mt-2 px-2 py-1.5 bg-bg-hover hover:bg-border-subtle disabled:opacity-50 disabled:cursor-not-allowed text-text-secondary text-xs rounded transition"
+          title="Save application logs to a file for troubleshooting"
+        >
+          Export Logs
+        </button>
+        {dbMsg && (
+          <p className="text-[10px] text-text-muted mt-1.5">{dbMsg}</p>
+        )}
       </div>
 
       {err && (

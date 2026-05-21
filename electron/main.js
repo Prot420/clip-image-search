@@ -26,6 +26,7 @@ const watcher = require('./watcher/folderWatcher');
 const searcher = require('./search/searcher');
 const ipc = require('./ipc');
 const log = require('./utils/logger');
+const updater = require('./updater');
 const { ensureThumbnail } = require('./utils/thumbnails');
 
 let mainWindow = null;
@@ -146,6 +147,9 @@ app.whenReady().then(() => {
 
   // 6. Create window
   createMainWindow();
+
+  // 7. Check for updates (packaged app only)
+  updater.init(() => mainWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

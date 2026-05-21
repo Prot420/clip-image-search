@@ -1,6 +1,6 @@
 {
   "name": "clip-image-search",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local AI-powered image search using CLIP. Fully offline, Electron + React + SQLite.",
   "main": "electron/main.js",
   "author": "Your Company",
@@ -22,6 +22,7 @@
     "better-sqlite3": "11.3.0",
     "chokidar": "3.6.0",
     "electron-log": "5.2.0",
+    "electron-updater": "^6.8.3",
     "heic-convert": "^2.1.0",
     "lucide-react": "^1.16.0",
     "onnxruntime-node": "1.19.2",
@@ -89,6 +90,13 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "CLIP Image Search"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Prot420",
+        "repo": "clip-image-search"
+      }
+    ]
   }
 }
