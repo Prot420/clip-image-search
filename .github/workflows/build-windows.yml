@@ -19,6 +19,8 @@ jobs:
     name: Build .exe on Windows
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
