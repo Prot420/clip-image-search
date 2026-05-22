@@ -5,96 +5,86 @@
  * Florence-2 caption text. Used by the indexer; the search code does
  * not depend on this — category is an optional filter layer.
  *
- * To add a new category later: add one entry to CATEGORY_KEYWORDS.
- * No schema change, no other code change required.
+ * English-only: the business and its captions are all in English.
+ * To add a new category later: add one entry to CATEGORY_KEYWORDS
+ * and CATEGORY_ORDER. No schema change, no other code change required.
  */
 
-// Each category maps to the English words that identify it in a caption.
-// Order matters slightly: more specific categories are checked first.
+// Each category maps to the words that identify it in a caption.
+// Keywords are matched as whole words (not substrings) to avoid
+// false hits like "panel" matching "pan".
 const CATEGORY_KEYWORDS = {
   'mortar':        ['mortar', 'pestle'],
-  'knife-block':   ['knife block', 'knife holder', 'knife stand'],
-  'cheese-server': ['cheese knife', 'cheese server', 'cheese set', 'cheese tool'],
+  'knife-block':   ['knife block', 'knife holder'],
+  'cheese-server': ['cheese knife', 'cheese server', 'cheese set'],
   'wine-opener':   ['wine opener', 'corkscrew', 'bottle opener'],
-  'wine-rack':     ['wine rack', 'bottle rack', 'wine holder'],
-  'cloche':        ['cloche', 'dome', 'cake stand', 'glass dome'],
-  'grinder':       ['grinder', 'mill', 'salt and pepper', 'pepper mill'],
-  'caddy':         ['caddy', 'organizer', 'organiser', 'cutlery holder'],
-  'coaster':       ['coaster'],
+  'wine-rack':     ['wine rack', 'bottle rack'],
+  'cloche':        ['cloche', 'glass dome', 'cake dome'],
+  'grinder':       ['grinder', 'pepper mill', 'salt mill',
+                    'salt and pepper', 'pepper shaker', 'salt shaker'],
+  'caddy':         ['caddy', 'cutlery holder'],
+  'coaster':       ['coaster', 'coasters'],
   'board':         ['cutting board', 'chopping board', 'cheese board',
                     'serving board', 'bread board', 'board'],
-  'tray':          ['tray', 'platter', 'lazy susan', 'turntable'],
-  'bowl':          ['bowl'],
-  'plate':         ['plate', 'dish'],
-  'pan':           ['pan', 'skillet', 'frying pan', 'cookware'],
-  'spoon':         ['spoon', 'scoop', 'ladle', 'spatula'],
-  'jar':           ['jar', 'canister', 'container'],
-  'stand':         ['stand', 'riser', 'rack', 'holder']
+  'tray':          ['tray', 'trays', 'platter', 'lazy susan'],
+  'bowl':          ['bowl', 'bowls'],
+  'plate':         ['plate', 'plates'],
+  'pan':           ['frying pan', 'skillet', 'saucepan'],
+  'spoon':         ['spoon', 'spoons', 'spatula', 'ladle', 'scoop'],
+  'jar':           ['jar', 'jars', 'canister'],
+  'grater':        ['grater', 'zester']
 };
 
 // Categories are tested in this order; first match wins.
+// More specific categories must come before broad ones.
 const CATEGORY_ORDER = [
   'mortar', 'knife-block', 'cheese-server', 'wine-opener', 'wine-rack',
-  'cloche', 'grinder', 'caddy', 'coaster', 'board', 'tray',
-  'bowl', 'plate', 'pan', 'spoon', 'jar', 'stand'
+  'cloche', 'grinder', 'grater', 'caddy', 'coaster', 'board', 'tray',
+  'bowl', 'plate', 'pan', 'spoon', 'jar'
 ];
 
 /**
+ * Whole-word (or whole-phrase) test. Avoids "pan" matching "panel"
+ * or "board" matching "boards" incorrectly — plurals are listed
+ * explicitly in the keyword lists above.
+ */
+function containsWord(text, keyword) {
+  // Build a boundary-aware regex; escape nothing special here since
+  // keywords are plain letters/spaces.
+  const re = new RegExp('(^|[^a-z])' + keyword + '([^a-z]|$)');
+  return re.test(text);
+}
+
+/**
  * Returns a category string for the given caption, or null if none matched.
- * Matching is plain case-insensitive substring search on the caption.
  */
 function categorize(caption) {
   if (!caption || typeof caption !== 'string') return null;
   const text = caption.toLowerCase();
 
   for (const cat of CATEGORY_ORDER) {
-    const keywords = CATEGORY_KEYWORDS[cat];
-    for (const kw of keywords) {
-      if (text.includes(kw)) return cat;
+    for (const kw of CATEGORY_KEYWORDS[cat]) {
+      if (containsWord(text, kw)) return cat;
     }
   }
-  return null;  // uncategorised — still fully searchable, just no category tag
+  return null;  // uncategorised — still fully searchable, just no tag
 }
 
 /**
- * Hindi (and common alternate) names mapped to an English category.
- * Used at SEARCH time: if a user types "katori", the query is mapped
- * to the "bowl" category. Small and fixed — easy to extend later.
- */
-const CATEGORY_ALIASES = {
-  'katori':  'bowl',
-  'katora':  'bowl',
-  'thali':   'plate',
-  'plate':   'plate',
-  'chakla':  'board',
-  'patta':   'board',
-  'tray':    'tray',
-  'thali-tray': 'tray',
-  'chamach': 'spoon',
-  'chammach':'spoon',
-  'karchi':  'spoon',
-  'martban': 'jar',
-  'jaar':    'jar',
-  'okhli':   'mortar',
-  'imamdasta':'mortar',
-  'kadhai':  'pan',
-  'tawa':    'pan'
-};
-
-/**
- * Given a free-text query, return a category if the query contains a
- * known alias or category word, else null. Search uses this to offer
- * an optional category filter — it never forces results.
+ * Given a free-text query, return a category if the query names one,
+ * else null. Search uses this as an optional filter — never forced.
  */
 function categoryFromQuery(query) {
   if (!query || typeof query !== 'string') return null;
   const words = query.toLowerCase().split(/\s+/);
   for (const w of words) {
-    if (CATEGORY_ALIASES[w]) return CATEGORY_ALIASES[w];
     if (CATEGORY_ORDER.includes(w)) return w;
+    // also match plural / singular against the category's own keywords
+    for (const cat of CATEGORY_ORDER) {
+      if (CATEGORY_KEYWORDS[cat].includes(w)) return cat;
+    }
   }
   return null;
 }
 
-module.exports = { categorize, categoryFromQuery, CATEGORY_ORDER, CATEGORY_KEYWORDS, CATEGORY_ALIASES };
-
+module.exports = { categorize, categoryFromQuery, CATEGORY_ORDER, CATEGORY_KEYWORDS };

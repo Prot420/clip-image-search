@@ -1,18 +1,52 @@
-import { useEffect } from 'react';
-import { X, ExternalLink, Folder } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Folder, Copy, Check } from 'lucide-react';
+import { useStore } from '../store/useStore';
+import { electron } from '../hooks/useElectronAPI';
 
-export default function ImageModal({ image, onClose }) {
+export default function ImageModal() {
+  // Read directly from the store — App renders <ImageModal /> with no props.
+  const image = useStore(s => s.selectedImage);
+  const onClose = useStore(s => s.clearSelectedImage);
+
+  const [revealMsg, setRevealMsg] = useState(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Reset transient UI state whenever a different image opens.
+  useEffect(() => {
+    setRevealMsg(null);
+    setCopied(false);
+  }, [image && image.id]);
+
   if (!image) return null;
 
   const folderPath = image.path
     ? image.path.substring(0, image.path.lastIndexOf(image.filename) - 1)
     : '';
+
+  async function handleReveal() {
+    setRevealMsg(null);
+    try {
+      await electron.revealImage(image.id);
+    } catch (e) {
+      setRevealMsg('Could not open folder: ' + e.message);
+    }
+  }
+
+  async function handleCopyPath() {
+    try {
+      await navigator.clipboard.writeText(image.path || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setRevealMsg('Could not copy path');
+    }
+  }
 
   return (
     <div
@@ -34,7 +68,7 @@ export default function ImageModal({ image, onClose }) {
         {/* Image area */}
         <div className="flex-1 flex items-center justify-center bg-black p-4 min-h-[400px]">
           <img
-            src={`img://${image.id}`}
+            src={`img://image/${image.id}`}
             alt={image.filename}
             className="max-w-full max-h-[80vh] object-contain"
           />
@@ -43,6 +77,26 @@ export default function ImageModal({ image, onClose }) {
         {/* Info sidebar */}
         <div className="md:w-96 p-6 overflow-y-auto bg-zinc-900 text-zinc-200">
           <h3 className="text-lg font-semibold mb-4 break-all">{image.filename}</h3>
+
+          {/* Actions */}
+          <div className="space-y-2 mb-5">
+            <button
+              onClick={handleReveal}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition"
+            >
+              <Folder size={15} /> Reveal in Folder
+            </button>
+            <button
+              onClick={handleCopyPath}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm rounded-md transition"
+            >
+              {copied ? <Check size={15} /> : <Copy size={15} />}
+              {copied ? 'Path copied' : 'Copy file path'}
+            </button>
+            {revealMsg && (
+              <p className="text-xs text-red-400">{revealMsg}</p>
+            )}
+          </div>
 
           <div className="space-y-4 text-sm">
             {image.caption && (
