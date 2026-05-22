@@ -165,9 +165,14 @@ export default function Sidebar() {
 
   return (
     <aside className="w-72 shrink-0 bg-bg-panel border-r border-border-subtle flex flex-col">
-      <div className="px-5 pt-5 pb-3">
-        <h1 className="text-base font-semibold tracking-tight">CLIP Search</h1>
-        <p className="text-xs text-text-muted mt-1">{stats.totalImages.toLocaleString()} images indexed</p>
+      <div className="px-5 pt-5 pb-4 border-b border-border-subtle">
+        <h1 className="text-[15px] font-semibold tracking-tight text-text-primary">
+          Senses Lifestyle
+        </h1>
+        <p className="text-[11px] text-text-secondary mt-0.5">Catalogue Image Search</p>
+        <p className="text-[11px] text-text-muted mt-2">
+          {stats.totalImages.toLocaleString()} images indexed
+        </p>
       </div>
 
       <div className="px-5 py-3 border-b border-border-subtle">

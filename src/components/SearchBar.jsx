@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { electron } from '../hooks/useElectronAPI';
 import { useDebounce } from '../hooks/useDebounce';
@@ -10,6 +10,19 @@ export default function SearchBar() {
   const setSearching = useStore(s => s.setSearching);
   const searching  = useStore(s => s.searching);
   const setSearchMode = useStore(s => s.setSearchMode);
+  const results        = useStore(s => s.results);
+  const activeCategory = useStore(s => s.activeCategory);
+  const setActiveCategory = useStore(s => s.setActiveCategory);
+
+  // Categories actually present in the current results — chips only
+  // appear for what's on screen, never a fixed hard-coded list.
+  const availableCategories = useMemo(() => {
+    const counts = new Map();
+    for (const r of results) {
+      if (r.category) counts.set(r.category, (counts.get(r.category) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [results]);
 
   const debouncedQuery = useDebounce(query, 250);
 
@@ -63,6 +76,39 @@ export default function SearchBar() {
           </button>
         )}
       </div>
+
+      {availableCategories.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-3">
+          <span className="text-[10px] uppercase tracking-wide text-text-muted mr-0.5">
+            Filter
+          </span>
+          {availableCategories.map(([cat, count]) => {
+            const active = activeCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(active ? null : cat)}
+                className={
+                  'px-2.5 py-1 rounded-full text-[11px] font-medium border transition ' +
+                  (active
+                    ? 'bg-accent border-accent text-white'
+                    : 'bg-bg-card border-border-subtle text-text-secondary hover:border-border hover:text-text-primary')
+                }
+              >
+                {cat} <span className="opacity-60 tabular-nums">{count}</span>
+              </button>
+            );
+          })}
+          {activeCategory && (
+            <button
+              onClick={() => setActiveCategory(null)}
+              className="px-2 py-1 text-[11px] text-text-muted hover:text-text-primary transition"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

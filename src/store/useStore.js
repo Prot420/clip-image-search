@@ -13,6 +13,7 @@ export const useStore = create((set, get) => ({
   results: [],
   searching: false,
   searchMode: 'text',
+  activeCategory: null,
 
   selectedImage: null,
   similarImages: [],
@@ -28,7 +29,8 @@ export const useStore = create((set, get) => ({
   setIndexSummary: (s)    => set({ indexSummary: s }),
 
   setQuery:     (q)       => set({ query: q }),
-  setResults:   (r)       => set({ results: r }),
+  setResults:   (r)       => set({ results: r, activeCategory: null }),
+  setActiveCategory: (c)  => set({ activeCategory: c }),
   setSearching: (b)       => set({ searching: b }),
   setSearchMode:(m)       => set({ searchMode: m }),
 

@@ -180,7 +180,8 @@ function rankResults(queryVec, queryWords, filterCategory) {
     path: paths[idx],
     filename: filenames[idx],
     score: combined[idx] / best,   // normalised 0..1 for display
-    caption: captions[idx]
+    caption: captions[idx],
+    category: categories[idx] || null
   }));
 }
 

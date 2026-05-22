@@ -12,10 +12,20 @@ function scoreColor(score) {
 }
 
 export default function ImageGrid() {
-  const results = useStore(s => s.results);
+  const allResults = useStore(s => s.results);
   const query   = useStore(s => s.query);
   const searching = useStore(s => s.searching);
+  const activeCategory = useStore(s => s.activeCategory);
   const setSelectedImage = useStore(s => s.setSelectedImage);
+
+  // Chip filter — narrows the displayed list only. The underlying
+  // search results are untouched; clearing the chip restores all.
+  const results = useMemo(
+    () => activeCategory
+      ? allResults.filter(r => r.category === activeCategory)
+      : allResults,
+    [allResults, activeCategory]
+  );
 
   const parentRef = useRef(null);
 
