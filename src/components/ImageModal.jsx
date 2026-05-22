@@ -3,6 +3,13 @@ import { X, Folder, Copy, Check } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { electron } from '../hooks/useElectronAPI';
 
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return null;
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 export default function ImageModal() {
   // Read directly from the store — App renders <ImageModal /> with no props.
   const image = useStore(s => s.selectedImage);
@@ -110,6 +117,13 @@ export default function ImageModal() {
               <div>
                 <div className="text-zinc-400 uppercase text-xs tracking-wide mb-1">Dimensions</div>
                 <div>{image.width} × {image.height} px</div>
+              </div>
+            )}
+
+            {formatBytes(image.fileSize) && (
+              <div>
+                <div className="text-zinc-400 uppercase text-xs tracking-wide mb-1">File Size</div>
+                <div>{formatBytes(image.fileSize)}</div>
               </div>
             )}
 

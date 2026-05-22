@@ -65,6 +65,9 @@ function loadCache() {
   const captions = new Array(n);
   const captionWords = new Array(n);   // pre-tokenized caption for keyword match
   const categories = new Array(n);     // optional product category per image
+  const widths = new Array(n);         // image pixel width  (for display only)
+  const heights = new Array(n);        // image pixel height (for display only)
+  const fileSizes = new Array(n);      // file size in bytes (for display only)
   const imgFlat = new Float32Array(n * dim);
 
   for (let i = 0; i < n; i++) {
@@ -75,6 +78,9 @@ function loadCache() {
     captions[i] = r.caption || '';
     captionWords[i] = new Set(tokenize(r.caption));
     categories[i] = r.category || null;
+    widths[i] = r.width || null;
+    heights[i] = r.height || null;
+    fileSizes[i] = r.fileSize || null;
     imgFlat.set(r.embedding, i * dim);
   }
 
@@ -91,7 +97,7 @@ function loadCache() {
     idf.set(w, Math.log(1 + n / df));
   }
 
-  cache = { ids, paths, filenames, captions, captionWords, categories, imgFlat, dim, idf };
+  cache = { ids, paths, filenames, captions, captionWords, categories, widths, heights, fileSizes, imgFlat, dim, idf };
   cacheCount = n;
   log.info('Search cache: ' + n + ' embeddings, dim=' + dim);
   return cache;
@@ -144,7 +150,7 @@ function rankResults(queryVec, queryWords, filterCategory) {
   const n = cacheCount;
   if (n === 0) return [];
 
-  const { ids, paths, filenames, captions, captionWords, categories } = cache;
+  const { ids, paths, filenames, captions, captionWords, categories, widths, heights, fileSizes } = cache;
   const vis = visualScores(queryVec);
 
   // Combine: visual cosine * keyword boost.
@@ -181,7 +187,10 @@ function rankResults(queryVec, queryWords, filterCategory) {
     filename: filenames[idx],
     score: combined[idx] / best,   // normalised 0..1 for display
     caption: captions[idx],
-    category: categories[idx] || null
+    category: categories[idx] || null,
+    width: widths[idx] || null,
+    height: heights[idx] || null,
+    fileSize: fileSizes[idx] || null
   }));
 }
 

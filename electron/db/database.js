@@ -72,7 +72,7 @@ function prepareStatements() {
     getImageById: db.prepare('SELECT * FROM images WHERE id = ?'),
     deleteImageByPath: db.prepare('DELETE FROM images WHERE path = ?'),
     countImages: db.prepare('SELECT COUNT(*) AS c FROM images'),
-    listAllEmbeddings: db.prepare('SELECT id, path, filename, embedding, caption, caption_embedding, category FROM images')
+    listAllEmbeddings: db.prepare('SELECT id, path, filename, embedding, caption, caption_embedding, category, width, height, file_size FROM images')
   };
 }
 
@@ -124,6 +124,9 @@ function loadAllEmbeddings() {
     embedding: new Float32Array(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength / 4),
     caption: r.caption || '',
     category: r.category || null,
+    width: r.width || null,
+    height: r.height || null,
+    fileSize: r.file_size || null,
     captionEmbedding: r.caption_embedding
       ? new Float32Array(r.caption_embedding.buffer, r.caption_embedding.byteOffset, r.caption_embedding.byteLength / 4)
       : null
