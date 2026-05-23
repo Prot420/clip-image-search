@@ -31,6 +31,22 @@ const { ensureThumbnail } = require('./utils/thumbnails');
 
 let mainWindow = null;
 
+/**
+ * Defence-in-depth: only serve a file if it lives inside one of the
+ * folders the user has registered. Stops a malformed DB row from
+ * reading arbitrary files off disk via the custom protocols.
+ */
+function isPathInRegisteredFolder(filePath) {
+  try {
+    const resolved = path.resolve(filePath);
+    for (const folder of db.listFolders()) {
+      const base = path.resolve(folder.path);
+      if (resolved === base || resolved.startsWith(base + path.sep)) return true;
+    }
+  } catch {}
+  return false;
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -45,7 +61,7 @@ function createMainWindow() {
       preload: getPreloadPath(),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
       webSecurity: true,
       spellcheck: false
     }
@@ -79,6 +95,9 @@ function registerThumbProtocol() {
 
       const row = db.getImageById(imageId);
       if (!row) return new Response('Not found', { status: 404 });
+      if (!isPathInRegisteredFolder(row.path)) {
+        return new Response('Forbidden', { status: 403 });
+      }
 
       const thumbPath = await ensureThumbnail(row.path);
       const data = await fs.promises.readFile(thumbPath);
@@ -101,6 +120,9 @@ function registerThumbProtocol() {
 
       const row = db.getImageById(imageId);
       if (!row) return new Response('Not found', { status: 404 });
+      if (!isPathInRegisteredFolder(row.path)) {
+        return new Response('Forbidden', { status: 403 });
+      }
 
       const data = await fs.promises.readFile(row.path);
       const ext = path.extname(row.path).slice(1).toLowerCase();
